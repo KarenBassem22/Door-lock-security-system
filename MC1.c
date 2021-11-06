@@ -1,143 +1,195 @@
 /*******************************************************************************
- * File name: MC2.c
+ * File name: MC1.c
  * Description: Source file for door locker security system
  * Date: 24/10/2021
  * Author: Karen Bassem
  ******************************************************************************/
-#include "util\delay.h"
-#include "MC2.h"
-
+#include "MC1.h"
 #define F_CPU 8000000UL
 
+uint8 str1[PW_SIZE];
+uint8 str2[PW_SIZE];
+
+void sendPassword(){
+	for(int i=0;i<PW_SIZE;i++){
+		UART_sendByte(str1[i]);
+	}
+}
+
+void sendConfirmPassword(){
+	for(int i=0;i<PW_SIZE;i++){
+		UART_sendByte(str2[i]);
+	}
+}
+
+char* get_password(void){
+	//char str1[PW_SIZE+1];
+	uint8 key_num;
+	LCD_displayStringRowColumn(0,0,"Enter password  ");
+	for(int i=0;i<PW_SIZE;i++){
+		key_num=KEYPAD_getPressedKey();
+		str1[i]=key_num;
+		LCD_moveCursor(1,i);
+		LCD_displayCharacter('*');
+		_delay_ms(4000);
+	}
+	return str1;
+}
+
+char* Confirm_password(void){
+	//char str2[PW_SIZE+1];
+	uint8 key_num;
+	LCD_displayStringRowColumn(0,0,"R_enter password");
+	for(int i=0;i<PW_SIZE;i++){
+		key_num=KEYPAD_getPressedKey();
+		str2[i]=key_num;
+		LCD_moveCursor(1,i);
+		LCD_displayCharacter('*');
+		_delay_ms(4000);
+	}
+	return str2;
+}
+
+
+
 int main(void){
+	uint8 flag=0;
 	SREG|=(1<<7);
+
+	LCD_init();
 
 	/* Initialize the UART driver with Baud-rate = 9600 bits/sec, 1 stop bit no parity bit and 8 data bits */
 	UART_configFrame config_Uptr={9600,ONE_BIT,DISABLED,EIGHT_BIT};
 	UART_init(&config_Uptr);
 
-	/* Initialize the TWI/I2C Driver */
-	I2C_configType config_Iptr={0x01,FAST_MODE,I2C_PRESCALER_1};
-	I2C_init(&config_Iptr);
+	uint8 key_num;
+	uint8 false_times=0;
 
-	BUZZER_init();
-	DcMotor_Init();
+	//Timer_ConfigType config_Tptr={PRESCALER_8,CTC_WZ_OCR,125,0};
 
-	Timer1_setCallBack(BUZZER_OFF);
-
-	int flag=0;
-	LCD_init();///
-	uint8 pw[PW_SIZE];
-
-	uint8 str1[PW_SIZE];
-	uint8 str2[PW_SIZE];
 
 	while(1){
-		//
-		//		/* Send MC2_READY byte to MC1 to ask it to send the string */
-		//		///UART_sendByte(MC2_READY);
-		//
-		//		/* Receive String from MC1 through UART */
-		//		uint8* data1;
-		//		UART_receiveString(data1);
-		//		LCD_displayString(data1);///
-		//		/* Send MC2_READY byte to MC1 to ask it to send the string */
-		//		//UART_sendByte(MC2_READY);
-		//
-		//		uint8* data2;
-		//		UART_receiveString(data2);
-		//
-		//		//EEPROM_writeByte(0x0311, &data); /* Write in the external EEPROM */
-		//		//_delay_ms(10);
+		get_password();
 
+		/* Wait until MC2 is ready to receive the string */
+		///while(UART_receiveByte() != MC2_READY){}
 
+		/////UART_sendString(str1);
+		sendPassword();
+
+		/*LCD_displayStringRowColumn(0,0,"R_enter password");
 		for(int i=0;i<PW_SIZE;i++){
-			str1[i]=UART_receiveByte();
+			UART_sendByte(KEYPAD_getPressedKey());
+			LCD_moveCursor(1,i);
+			LCD_displayCharacter('*');
+		}*/
+
+		LCD_sendCommand(CLEAR_SCREEN);
+		_delay_ms(500);
+
+		Confirm_password();
+
+		/* Wait until MC2 is ready to receive the string */
+		//while(UART_receiveByte() != MC2_READY){}
+
+		////UART_sendString(str2);
+		sendConfirmPassword();
+
+		LCD_sendCommand(CLEAR_SCREEN);
+		_delay_ms(500);
+
+		///while(flag==0){
+		UART_sendByte(MC1_READY);
+		if(UART_receiveByte()== MATCH){
+			flag=1;
+			LCD_displayString("Match!");
+			_delay_ms(4000);
 		}
-		LCD_integerToString(str1[0]); /* to check if it's received */
-
-		for(int i=0;i<PW_SIZE;i++){
-			str2[i]=UART_receiveByte();
+		else{
+			LCD_displayString("Mismatch!");
+			_delay_ms(4000);
 		}
-		LCD_integerToString(str2[4]); /* to check if it's received */
+		///}
 
-		for(int i=0;i<PW_SIZE;i++){
-			if(str1[i]!=str2[i]){
-				while(UART_receiveByte() != MC1_READY){}
-				UART_sendByte(MISMATCH);
-				break;
-			}
-			else if(i==(PW_SIZE-1)){
-				while(UART_receiveByte() != MC1_READY){}
-				UART_sendByte(MATCH);
-				LCD_displayString("match"); /* check */
-			}
-		}
-
-		for(int i=0;i<PW_SIZE;i++){
-			EEPROM_writeByte(0x0311+i, str1[i]); /* Write in the external EEPROM */
-			_delay_ms(10);
-		}
-
-		/**/while(flag==0){
-			/**/	for(int i=0;i<PW_SIZE;i++){
-				str1[i]=UART_receiveByte();
-			}
-			LCD_integerToString(str1[0]); /* to check if it's received */
-
-			//LCD_displayString("saved");
-
-			/* read password from EEPROM */
-			for(int i=0;i<PW_SIZE;i++){
-				EEPROM_readByte(0x0311+i,&pw[i]); //pw
-				_delay_ms(10);
-			}
-
-
-			LCD_integerToString(pw[0]); /* to check */ //pw
-			LCD_integerToString(pw[1]); LCD_integerToString(pw[2]); LCD_integerToString(pw[3]);
-			_delay_ms(2000);
-
-
-
-			//get password
-			/**///while(flag==0){
-			for(int i=0;i<PW_SIZE;i++){
-				if(pw[i]!=str1[i]){ //pw
-					while(UART_receiveByte() != MC1_READY){}
-					UART_sendByte(MISMATCH);
-					LCD_displayString("MISMATCH2");
-					break; /* break out the loop */
+		while(flag==1){
+			LCD_displayStringRowColumn(0,0,"+:open door");
+			LCD_displayStringRowColumn(1,0,"-:change password");
+			if(KEYPAD_getPressedKey()=='+'){
+				LCD_sendCommand(CLEAR_SCREEN);
+				_delay_ms(4000);
+				get_password();
+				sendPassword();
+				//compare passwords
+				UART_sendByte(MC1_READY);
+				if(UART_receiveByte()== MATCH){
+					UART_sendByte(OPEN_DOOR);
+					//to continue		//Timer1_init(&config_Tptr);
+					// for 15 secs
+					LCD_sendCommand(CLEAR_SCREEN);
+					LCD_displayString("door is opening");
+					_delay_ms(4000);
+					//stop for 3 secs
+					// for 15 secs
+					LCD_sendCommand(CLEAR_SCREEN);
+					LCD_displayString("door is closing");
 				}
-				else if(i==(PW_SIZE-1)){
-					while(UART_receiveByte() != MC1_READY){}
-					UART_sendByte(MATCH);
-					LCD_displayString("match"); /* check */
-
-
+				else{
+					LCD_sendCommand(CLEAR_SCREEN);
+					LCD_displayString("Mismatch!");
+					_delay_ms(4000);
+					//break; //to get out of the loop
 				}
-			}
-			if(UART_receiveByte() == OPEN_DOOR){            /* happens when match password in open door */
-				DcMotor_Rotate(CW,DUTY_CYCLE_100);
-				//15 secs
-				DcMotor_Rotate(STOP,DUTY_CYCLE_0);
-				//3 secs
-				DcMotor_Rotate(A_CW,DUTY_CYCLE_100);
-				//15 secs
-				LCD_displayString("opening");
-			}
-			else if(UART_receiveByte() == CHANGE_PW){       /* happens when match password in change password */
-				break; /* begin from start again */
-			}
-			else if(UART_receiveByte() == ERROR_CHANGE_PW){ /* happens when Mismatch password in change password */
-				if(UART_receiveByte() == MISMATCH3){        /* happens when Mismatch password 3 times in a row in change password */
-					BUZZER_ON();
-					//1-MIN
-					BUZZER_OFF();
-				}
-			}
 
+				LCD_sendCommand(CLEAR_SCREEN);
+				_delay_ms(500);
+
+			}
+			else if(KEYPAD_getPressedKey()=='-'){
+				LCD_sendCommand(CLEAR_SCREEN);
+				_delay_ms(500);
+				LCD_displayStringRowColumn(0,0,"current password");
+				_delay_ms(4000);
+				uint8 key_num;
+				for(int i=0;i<PW_SIZE;i++){
+					key_num=KEYPAD_getPressedKey();
+					str1[i]=key_num;
+					LCD_moveCursor(1,i);
+					LCD_displayCharacter('*');
+					_delay_ms(4000);
+				}
+				sendPassword();
+
+				UART_sendByte(MC1_READY);
+				if(UART_receiveByte()== MATCH){
+					UART_sendByte(CHANGE_PW);
+					LCD_sendCommand(CLEAR_SCREEN);
+					false_times=0; /* to reset counter of false times if pw matches */
+					break;         /* to begin from start */
+				}
+				else{
+					UART_sendByte(ERROR_CHANGE_PW);
+					false_times++;
+					LCD_sendCommand(CLEAR_SCREEN);
+					_delay_ms(500);
+					LCD_displayString("Mismatch!");
+					_delay_ms(4000);
+					if(false_times==3){
+						//to continue			//lock system for 1 min
+						//send by uart to activate buzzer
+						UART_sendByte(MISMATCH3);
+						LCD_sendCommand(CLEAR_SCREEN);
+						_delay_ms(500);
+						LCD_displayString("error 3 times");
+						_delay_ms(4000);
+					}
+				}
+
+				//flag=0; /* to get out of this while loop */
+				//if match
+				//break;
+			}
 		}
 
-	/**/	}
+	}
+
 }
